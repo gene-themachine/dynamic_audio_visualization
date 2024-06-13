@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Music Player with Animated D3.js Line Charts and Timer</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Rubik:ital,wght@0,300..900;1,300..900&display=swap" rel="stylesheet">
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        body {
+            font-family: 'Lato', sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: #333; 
+            color: #fff; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            overflow-x: auto;
+        }
+        h1 {
+            font-family: "Rubik", sans-serif;
+
+            font-size: 3rem;
+            color: #fff; 
+            margin-bottom: 20px;
+        }
+        .controls, .legend {
+            display: flex;
+            justify-content: center;
+            margin: 10px 0;
+        }
+        .controls button, .legend div {
+            background-color: lightgray;
+            margin: 0 10px;
+            padding: 10px 20px;
+            border: none;
+            cursor: pointer;
+            font-size: 1rem;
+            border-radius: 5px;
+            transition: background-color 0.3s ease;
+        }
+        .controls button:hover {
+            background-color: #ddd;
+        }
+        .charts-wrapper {
+            display: flex;
+            overflow-x: auto;
+            padding: 20px;
+            width: 100%;
+        }
+        .chart {
+            margin: 0 10px;
+            background-color: #444; 
+            border-radius: 10px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+            flex-shrink: 0;
+            width: 600px;
+        }
+        svg {
+            width: 100%;
+            height: 400px;
+            background-color: #555; 
+        }
+        .legend {
+            margin-top: 30px;
+        }
+        .legend div {
+            display: flex;
+            align-items: center;
+        }
+        .legend span {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            margin-right: 5px;
+        }
+        .tick text {
+            font-size: 12px;
+            font-family: 'Lato', sans-serif;
+            fill: #fff; 
+        }
+        text {
+            font-family: 'Squada One', sans-serif;
+            font-size: 14px;
+            fill: #fff;
+        }
+        .tooltip {
+            font-size: 14px;
+            fill: #fff; 
+        }
+        .color_change {
+            color: #333;
+            font-family: "Rubik", sans-serif;
+        }
+        .is_text {
+            font-family: "Rubik", sans-serif;
+        }
+
+    </style>
+</head>
+<body>
+    <h1>Dynamic Audio Visualization</h1>
+    
+    <div class="controls">
+        <button class = "is_text"  id="toggleTimer">Start Timer</button>
+    </div>
+    <div class="controls">
+        <button class = "is_text" id="song1">Lose Yourself</button>
+        <button class = "is_text" id="song2">Fein</button>
+        <button class = "is_text" id="song3">The Choice is Yours</button>
+    </div>
+    <div class="controls">
+        <h2 class = "is_text">Time: <span id="timeDisplay">00:00</span></h2>
+    </div>
+    <div class="charts-wrapper">
+        <div class = "is_text" id="chart1" class="chart">
+            <h2>Bass</h2>
+            <svg></svg>
+        </div>
+        <div class = "is_text"  id="chart2" class="chart">
+            <h2>Middle</h2>
+            <svg></svg>
+        </div>
+        <div class = "is_text" id="chart3" class="chart">
+            <h2>Treble</h2>
+            <svg></svg>
+        </div>
+    </div>
+    <div class="legend">
+        <div class = "color_change"><span style="background-color: #0096FF;"></span>Song 1: Lose Yourself</div>
+        <div  class = "color_change"><span style="background-color: #66FF00;"></span>Song 2: Fein</div>
+        <div class = "color_change"><span style="background-color: #FF000C;"></span>Song 3: The Choice is Yours</div>
+    </div>
+    <audio id="audio1" src="/data/lose_yourself_short.mp3"></audio>
+    <audio id="audio2" src="/data/fein_short.mp3"></audio>
+    <audio id="audio3" src="/data/the_choice_is_yours_short.mp3"></audio>
+
+    <script>
+        let currentAudio = null;
+        let timerInterval = null;
+        let timer = 0;
+        let isPaused = true;
+
+        const audio1 = document.getElementById('audio1');
+        const audio2 = document.getElementById('audio2');
+        const audio3 = document.getElementById('audio3');
+        
+        const timerDisplay = document.getElementById('timeDisplay');
+        const toggleTimerButton = document.getElementById('toggleTimer');
+
+
+        const width = 500; 
+        const height = 300; 
+        const margin = { top: 20, right: 30, bottom: 50, left: 40 };
+        const duration = 1000; 
+
+        const yScale = d3.scaleLinear().domain([-50, -10]).range([height, 0]);
+
+        function formatTime(seconds) {
+            const minutes = Math.floor(seconds / 60);
+            const secs = seconds % 60;
+            return `${String(minutes).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
+        }
+
+        function updateTimerDisplay() {
+            timerDisplay.textContent = formatTime(timer);
+        }
+
+        function startTimer() {
+            if (timerInterval) return;
+            isPaused = false;
+            timerInterval = setInterval(() => {
+                timer++;
+                if (timer > 90) {
+                    timer = 0;
+                    resetData();
+                }
+                updateTimerDisplay();
+                updateCharts();
+            }, 1000);
+        }
+
+        function stopTimer() {
+            clearInterval(timerInterval);
+            timerInterval = null;
+            isPaused = true;
+        }
+
+        function toggleTimer() {
+            if (timerInterval) {
+                stopTimer();
+                if (currentAudio) {
+                    currentAudio.pause();
+                }
+                toggleTimerButton.textContent = 'Start Timer';
+            } else {
+                startTimer();
+                if (currentAudio) {
+                    currentAudio.currentTime = timer;
+                    currentAudio.play();
+                }
+                toggleTimerButton.textContent = 'Pause Timer';
+            }
+        }
+
+        function playAudio(audio) {
+            if (currentAudio) {
+                currentAudio.pause();
+            }
+            audio.currentTime = timer;
+            audio.play();
+            currentAudio = audio;
+        }
+
+        document.getElementById('song1').addEventListener('click', () => loadAndPlaySong('lose_yourself', 'blue'));
+        document.getElementById('song2').addEventListener('click', () => loadAndPlaySong('fein', 'green'));
+        document.getElementById('song3').addEventListener('click', () => loadAndPlaySong('the_choice_is_yours', 'red'));
+        toggleTimerButton.addEventListener('click', toggleTimer);
+
+        audio1.addEventListener('play', () => { if (!timerInterval) startTimer(); });
+        audio2.addEventListener('play', () => { if (!timerInterval) startTimer(); });
+        audio3.addEventListener('play', () => { if (!timerInterval) startTimer(); });
+
+        audio1.addEventListener('pause', stopTimer);
+        audio2.addEventListener('pause', stopTimer);
+        audio3.addEventListener('pause', stopTimer);
+
+        const xScale = d3.scaleLinear().domain([0, 90]).range([0, width]);
+
+        const line = d3.line()
+            .x(d => xScale(d.Second))
+            .y(d => yScale(d.Average_Decibels));
+
+        let data1 = { lose_yourself: [], fein: [], the_choice_is_yours: [] };
+        let data2 = { lose_yourself: [], fein: [], the_choice_is_yours: [] };
+        let data3 = { lose_yourself: [], fein: [], the_choice_is_yours: [] };
+
+        function createSvg(chartId) {
+            return d3.select(`#${chartId} svg`)
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g")
+                .attr("transform", `translate(${margin.left},${margin.top})`);
+        }
+
+        const svg1 = createSvg("chart1");
+        const svg2 = createSvg("chart2");
+        const svg3 = createSvg("chart3");
+
+        function createPath(svg, color) {
+            return svg.append("path").attr("class", "line").attr("fill", "none").attr("stroke", color).attr("stroke-width", 2);
+        }
+
+        const paths1 = {
+            lose_yourself: createPath(svg1, '#0096FF'),
+            fein: createPath(svg1, '#66FF00'),
+            the_choice_is_yours: createPath(svg1, '#FF000C')
+        };
+
+        const paths2 = {
+            lose_yourself: createPath(svg2, '#0096FF'),
+            fein: createPath(svg2, '#66FF00'),
+            the_choice_is_yours: createPath(svg2, '#FF000C')
+        };
+
+        const paths3 = {
+            lose_yourself: createPath(svg3, '#0096FF'),
+            fein: createPath(svg3, '#66FF00'),
+            the_choice_is_yours: createPath(svg3, '#FF000C')
+        };
+
+        function appendAxes(svg) {
+            svg.append("g")
+                .attr("class", "x axis")
+                .attr("transform", `translate(0, ${height})`)
+                .call(d3.axisBottom(xScale).ticks(10).tickFormat(d => formatTime(d)));
+
+            svg.append("g")
+                .attr("class", "y axis")
+                .call(d3.axisLeft(yScale).ticks(5));
+        }
+
+        appendAxes(svg1);
+        appendAxes(svg2);
+        appendAxes(svg3);
+
+        function updateCharts() {
+            Object.keys(data1).forEach(song => {
+                const filteredData1 = data1[song].filter(d => d.Second <= timer);
+                const filteredData2 = data2[song].filter(d => d.Second <= timer);
+                const filteredData3 = data3[song].filter(d => d.Second <= timer);
+
+                paths1[song].datum(filteredData1).attr("d", line);
+                paths2[song].datum(filteredData2).attr("d", line);
+                paths3[song].datum(filteredData3).attr("d", line);
+            });
+        }
+
+        function resetData() {
+            data1 = { lose_yourself: [], fein: [], the_choice_is_yours: [] };
+            data2 = { lose_yourself: [], fein: [], the_choice_is_yours: [] };
+            data3 = { lose_yourself: [], fein: [], the_choice_is_yours: [] };
+        }
+
+        function loadAndPlaySong(song, color) {
+            d3.csv(`/data/${song}_bass.csv`).then(bassData => {
+                data1[song] = bassData.map(d => ({
+                    Second: +d.Second,
+                    Average_Decibels: +d.Average_Decibels
+                }));
+                updateCharts();
+            });
+
+            d3.csv(`/data/${song}_middle.csv`).then(middleData => {
+                data2[song] = middleData.map(d => ({
+                    Second: +d.Second,
+                    Average_Decibels: +d.Average_Decibels
+                }));
+                updateCharts();
+            });
+
+            d3.csv(`/data/${song}_high.csv`).then(highData => {
+                data3[song] = highData.map(d => ({
+                    Second: +d.Second,
+                    Average_Decibels: +d.Average_Decibels
+                }));
+                updateCharts();
+            });
+
+            if (currentAudio) {
+                currentAudio.pause();
+            }
+
+            switch (song) {
+                case 'lose_yourself':
+                    currentAudio = audio1;
+                    break;
+                case 'fein':
+                    currentAudio = audio2;
+                    break;
+                case 'the_choice_is_yours':
+                    currentAudio = audio3;
+                    break;
+            }
+
+            currentAudio.currentTime = timer;
+            currentAudio.play();
+        }
+
+        // Initial load of all songs data
+        function initialLoad() {
+            loadAndPlaySong('lose_yourself', 'blue');
+            loadAndPlaySong('fein', 'green');
+            loadAndPlaySong('the_choice_is_yours', 'red');
+        }
+
+        initialLoad();
+    </script>
+</body>
+</html>
